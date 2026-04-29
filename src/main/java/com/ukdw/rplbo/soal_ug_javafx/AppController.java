@@ -16,8 +16,7 @@ import javafx.scene.control.TableView;
 import javafx.scene.control.cell.PropertyValueFactory;
 
 import java.sql.SQLException;
-import java.util.ArrayList;
-import java.util.List;
+import java.util.*;
 
 public class AppController {
     @FXML
@@ -122,6 +121,28 @@ public class AppController {
     }
 
     public void update_barchart(String target_col,String val) {
+        barchart.getData().clear();
+
+        List<Nilai> nilaiList = nilai_table.fetch_nilai_by(target_col, val);
+
+        Map<String, Integer> gradeCount = new LinkedHashMap<>();
+        List<String> gradeOrder = List.of("A", "A-", "B+", "B", "B-", "C+", "C", "D", "E");
+        for (String g : gradeOrder) gradeCount.put(g, 0);
+
+        for (Nilai n : nilaiList) {
+            String grade = n.getNilai();
+            gradeCount.merge(grade, 1, Integer::sum);
+        }
+
+        XYChart.Series<String, Number> series = new XYChart.Series<>();
+        series.setName("Jumlah Nilai");
+        for (Map.Entry<String, Integer> entry : gradeCount.entrySet()) {
+            if (entry.getValue() > 0) {
+                series.getData().add(new XYChart.Data<>(entry.getKey(), entry.getValue()));
+            }
+        }
+        barchart.getData().add(series);
+
         // TODO: buat barchart menampilkan seberapa banyak nilai A,A-,B+,...
         // method ini dapat di gunakan di 2 situasi yaitu nilai berdasarkan nim mahasiswa dan berdasarkan kode matakuliah
         // ambil data dari attribute nilai_table
@@ -130,17 +151,70 @@ public class AppController {
     }
 
     public void update_linechart(String kode_mk) {
+        linechart.getData().clear();
+
+        List<Nilai> nilaiList = nilai_table.fetch_nilai_by("kode_mk", kode_mk);
+
+        Map<String, List<Double>> angkatanNilai = new TreeMap<>();
+
+        for (Nilai n : nilaiList) {
+            Mahasiswa mhs = mhs_table.fetch_mahasiswa_by_nim(n.getNIM());
+            if (mhs == null) continue;
+
+            String angkatan = String.valueOf(mhs.getAngkatan()); // int → String
+            double nilaiAngka = n.get_converted_nilai();          // fix: pakai method yang benar
+            angkatanNilai.computeIfAbsent(angkatan, k -> new ArrayList<>()).add(nilaiAngka);
+        }
+
         // TODO: buatlah linechart yang menggambarkan nilai mean dari setiap angkatan
         // angkatan dapat di ambil dengan cara getAngkatan() pada entity Mahasiswa
         // tips: fetch dulu entity mahasiswa menggunakan fetch_mahasiswa_by_nim() di mhs_tabel menggunakan nim pada nilai_table
 
+        XYChart.Series<String, Number> series = new XYChart.Series<>();
+        series.setName("Rata-rata Nilai per Angkatan");
+
+        for (Map.Entry<String, List<Double>> entry : angkatanNilai.entrySet()) {
+            double mean = entry.getValue().stream()
+                    .mapToDouble(Double::doubleValue)
+                    .average()
+                    .orElse(0.0);
+            series.getData().add(new XYChart.Data<>(entry.getKey(), mean));
+        }
+
+        linechart.getData().add(series);
+
     }
 
     public void update_piechart(String target_col, String val) {
-       // TODO: tampilkan banyaknya nilai A,A-,B+,... dalam bentuk piechart
+        piechart.getData().clear();
+
+        List<Nilai> nilaiList = nilai_table.fetch_nilai_by(target_col, val);
+
+        Map<String, Integer> gradeCount = new LinkedHashMap<>();
+        List<String> gradeOrder = List.of("A", "A-", "B+", "B", "B-", "C+", "C", "D", "E");
+        for (String g : gradeOrder) gradeCount.put(g, 0);
+
+        for (Nilai n : nilaiList) {
+            String grade = n.getNilai();
+            gradeCount.merge(grade, 1, Integer::sum);
+        }
+
+        ObservableList<PieChart.Data> pieData = FXCollections.observableArrayList();
+        for (Map.Entry<String, Integer> entry : gradeCount.entrySet()) {
+            if (entry.getValue() > 0) {
+                pieData.add(new PieChart.Data(entry.getKey() + " (" + entry.getValue() + ")", entry.getValue()));
+            }
+        }
+
+        piechart.setData(pieData);
+        piechart.setTitle("Distribusi Nilai");
+
+        // TODO: tampilkan banyaknya nilai A,A-,B+,... dalam bentuk piechart
         // method ini dapat di gunakan di 2 situasi yaitu nilai berdasarkan nim mahasiswa dan berdasarkan kode matakuliah
         // ambil data dari attribute nilai_table
         // tips: target_col merujuk pada nama kolom di datbase sedangkan val adalah value yang di cari dari kolom tersebut misal:
         // target_col -> nim, val -> 71200001, maka kita mencari 71200001 di kolom nim
     }
+
+
 }
